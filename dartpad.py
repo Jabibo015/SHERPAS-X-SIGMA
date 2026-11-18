@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const SigmaDzyApp());
@@ -104,6 +106,79 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   String nombre = 'Timothy Perez';
   String correo = 'timothy.perez@email.com';
   String telefono = '+34 600 123 456';
+
+  bool suscritoNewsletter = false;
+  bool enviandoNewsletter = false;
+
+  Future<void> _suscribirNewsletter() async {
+    final emailValido = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(correo);
+    if (!emailValido) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Introduce un correo válido antes de suscribirte.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => enviandoNewsletter = true);
+    try {
+      final respuestas = await Future.wait([
+        // 1. Correo de bienvenida
+        http
+            .post(
+              Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'service_id': 'service_btyebnu',
+                'template_id': 'template_bcbwdqd',
+                'user_id': 'WsUOtg9J7nv_ql5Bz',
+                'template_params': {'to_email': correo, 'nombre': nombre},
+              }),
+            )
+            .timeout(const Duration(seconds: 15)),
+        // 2. Informe mensual
+        http
+            .post(
+              Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'service_id': 'service_btyebnu',
+                'template_id': 'template_o1r2uzf',
+                'user_id': 'WsUOtg9J7nv_ql5Bz',
+                'template_params': {'to_email': correo, 'nombre': nombre},
+              }),
+            )
+            .timeout(const Duration(seconds: 15)),
+      ]);
+
+      if (!mounted) return;
+      if (respuestas[0].statusCode == 200 && respuestas[1].statusCode == 200) {
+        setState(() => suscritoNewsletter = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Correos de bienvenida y resumen enviados a $correo'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception(
+          'Error ${respuestas[0].statusCode} / ${respuestas[1].statusCode}',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo suscribir. Inténtalo de nuevo.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => enviandoNewsletter = false);
+    }
+  }
 
   void _editarDato(
     String titulo,
@@ -254,7 +329,56 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
               (nuevoValor) => setState(() => telefono = nuevoValor),
             );
           }),
-
+          const SizedBox(height: 24),
+          const Text(
+            'Newsletter',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: ListTile(
+              leading: Icon(
+                suscritoNewsletter ? Icons.mark_email_read : Icons.mail_outline,
+                color: const Color(0xFFEA580C),
+              ),
+              title: Text(
+                suscritoNewsletter
+                    ? 'Suscrito a la newsletter'
+                    : 'Suscribirme a la newsletter',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              subtitle: Text(
+                suscritoNewsletter
+                    ? 'Recibirás novedades en $correo'
+                    : 'Recibe consejos financieros en tu correo.',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: enviandoNewsletter
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : (suscritoNewsletter
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : const Icon(Icons.chevron_right, color: Colors.grey)),
+              onTap: (suscritoNewsletter || enviandoNewsletter)
+                  ? null
+                  : _suscribirNewsletter,
+            ),
+          ),
           const SizedBox(height: 32),
           const Text(
             'Soporte y Legal',
